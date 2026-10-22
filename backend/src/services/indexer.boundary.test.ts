@@ -82,13 +82,17 @@ describe("indexer boundary behavior", () => {
   });
 
   it("dedupes a replayed page without duplicating rows", async () => {
-    h.getEvents.mockResolvedValue({ events: [goodEvent], cursor: undefined });
-    await runOnePoll();
-    expect(rows()).toBe(1);
+  h.getEvents.mockResolvedValue({ events: [goodEvent], cursor: undefined });
+  await runOnePoll();
+  expect(rows()).toBe(1);
 
-    resetIndexerState();
-    initIndexer("http://rpc.test", "CONTRACT");
-    await runOnePoll();
-    expect(rows()).toBe(1);
-  });
+  // Simulate a crash: rows exist but the cursor was never saved
+  h.db.prepare("DELETE FROM indexer_cursor").run();
+  resetIndexerState();
+  initIndexer("http://rpc.test", "CONTRACT");
+
+  const snap = await runOnePoll();
+  expect(h.getEvents).toHaveBeenCalledTimes(2);
+  expect(snap.lastPollOutcome).toBe("restart_recovery");
+  expect(rows()).toBe(1);
 });
